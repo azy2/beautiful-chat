@@ -7,7 +7,6 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { buildThemeTokens } from "./components/theme-tokens";
 import { ToolCallout } from "./components/tool-callouts";
 import { ReasoningTrace } from "./components/reasoning-trace";
-import { TaskList } from "./components/task-list";
 import { UserMessage } from "./components/user-message";
 import { hostFontEscape } from "./components/host-font-escape";
 import { promptRowAnchor } from "./components/prompt-anchor";
@@ -25,12 +24,11 @@ import { AssistantFooter } from "./components/turn-footer";
 import { SystemCard } from "./components/system-card";
 import { parseSystemEnvelope } from "./system-envelope";
 import { useIsTimelineTail } from "./timeline-tail";
+import { useNoteActiveAgent } from "./active-agent";
 import type {
   ToolCalloutData,
   ToolCallKind,
   ReasoningTraceData,
-  TaskListData,
-  TaskItemData,
   EvalCell,
   HubData,
   McpToolData,
@@ -59,11 +57,6 @@ export interface LiveToolCallPayload {
 
 export interface LiveReasoningPayload {
   text: string;
-  phase?: string;
-}
-
-export interface LiveTodoPayload {
-  items: Array<Record<string, unknown>>;
   phase?: string;
 }
 
@@ -393,6 +386,7 @@ export function LiveToolCallRenderer({
 }: PluginTimelineItemProps<LiveToolCallPayload>) {
   const revealPath = useRpc(revealPathRpc);
   const cwd = useAgent(agentId, (agent) => agent.cwd);
+  useNoteActiveAgent(agentId);
   const preferences = useEnhancerPreferences();
   const tokens = useMemo(
     () => buildThemeTokens(theme.colors, preferences),
@@ -704,43 +698,6 @@ export function LiveReasoningRenderer({
   );
 }
 
-export function LiveTodoRenderer({ item, theme }: PluginTimelineItemProps<LiveTodoPayload>) {
-  const preferences = useEnhancerPreferences();
-  const tokens = useMemo(
-    () => buildThemeTokens(theme.colors, preferences),
-    [theme.colors, preferences],
-  );
-  useSelectionActions(tokens, preferences.selectionActions);
-  usePointerGlow(preferences.pointerGlow);
-  const data = item.data;
-
-  const taskListData: TaskListData = useMemo(() => {
-    const tasks: TaskItemData[] = (data.items || []).map((task, idx) => ({
-      id: typeof task.id === "string" ? task.id : `todo-${idx}`,
-      title: typeof task.text === "string" ? task.text : "Untitled task",
-      phase: "Execution",
-      status:
-        task.completed === true
-          ? "completed"
-          : task.status === "in_progress"
-            ? "in_progress"
-            : "pending",
-    }));
-
-    return {
-      id: "live-todo",
-      phaseName: "Checklist Progress",
-      tasks,
-    };
-  }, [data]);
-
-  return (
-    <View {...hostFontEscape}>
-      <TaskList data={taskListData} tokens={tokens} />
-    </View>
-  );
-}
-
 export interface LiveAssistantPayload {
   text: string;
 }
@@ -859,6 +816,7 @@ export function LiveUserMessageRenderer({
   );
   useSelectionActions(tokens, preferences.selectionActions);
   usePointerGlow(preferences.pointerGlow);
+  useNoteActiveAgent(agentId);
   const paseo = usePaseo();
   const handle = useMemo(() => paseo.agents.ref(agentId), [paseo, agentId]);
 

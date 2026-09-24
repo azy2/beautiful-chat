@@ -12,11 +12,11 @@ import { getEnhancerPreferences } from "./client/preferences";
 import {
   LiveToolCallRenderer,
   LiveReasoningRenderer,
-  LiveTodoRenderer,
   LiveUserMessageRenderer,
   LiveNoticeRenderer,
   LiveAssistantRenderer,
 } from "./client/live-renderers";
+import { TasksPanel } from "./client/task-panel";
 
 type JsonValue = boolean | null | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -35,8 +35,7 @@ export default function contribute(client: PluginClientContext) {
   // Paseo's Ctrl+F cannot reveal rows this plugin draws; this bar can.
   const removeChatFind = installChatFind();
 
-  // Configuration lives in the host Settings area. The plugin has no showcase
-  // surface, panels, or Command Center item.
+  // Configuration lives in the host Settings area.
   client.addSettingsScreen({
     id: "chat-presentation",
     title: "Chat presentation",
@@ -44,7 +43,33 @@ export default function contribute(client: PluginClientContext) {
     Component: BeautifulChatSettingsPage,
   });
 
-  // Live chat timeline interception: render real tool calls, reasoning, and todos with enhanced UI.
+  // A checklist keeps a fixed place instead of scrolling away with the turn
+  // that wrote it: the panel for the readers who want it beside the chat, and
+  // one composer pill per agent for the count they can see while working.
+  //
+  // Paseo scopes an Explorer pane to a workspace, so the panel is registered
+  // that way; it reads the agent whose stream it sits beside.
+  client.addWorkspacePanel({
+    id: "tasks",
+    title: "Tasks",
+    icon: "ListChecks",
+    context: "workspace",
+    locations: ["explorer", "workspace"],
+    Component: TasksPanel,
+  });
+
+  client.addCommandCenterItem({
+    id: "open-tasks",
+    title: "Open agent tasks",
+    icon: "ListChecks",
+    keywords: ["todo", "checklist", "tasks"],
+    context: "agent",
+    onSelect({ openPanel }) {
+      openPanel("tasks", { location: "explorer" });
+    },
+  });
+
+  // Live chat timeline interception: render real tool calls and reasoning with enhanced UI.
   const removeToolTransformer = client.addTimelineTransformer({
     id: "omp-enhanced-tool-call",
     query: { itemType: "tool_call" },
@@ -115,36 +140,15 @@ export default function contribute(client: PluginClientContext) {
     Component: LiveReasoningRenderer,
   });
 
-  const removeTodoTransformer = client.addTimelineTransformer({
-    id: "omp-enhanced-todo",
-    query: { itemType: "todo" },
-    transform({ item, phase }) {
-      if (item.type !== "todo") return undefined;
-      return {
-        items: [
-          {
-            type: "plugin" as const,
-            kind: "omp-todo",
-            version: 1,
-            data: {
-              items: toJsonValue(item.items),
-              phase,
-            },
-          },
-        ],
-      };
-    },
-  });
-
-  const removeTodoRenderer = client.addTimelineRenderer({
-    kind: "omp-todo",
-    version: 1,
-    schema: z.object({
-      items: z.array(z.record(z.string(), z.unknown())),
-      phase: z.string().optional(),
-    }),
-    Component: LiveTodoRenderer,
-  });
+  // The checklist row is left to Paseo.
+  //
+  // The host derives its own Tasks readout — the `n/m tasks` pill above the
+  // composer and the list behind it — from the `todo` rows in the render
+  // model. Replacing that row with a plugin item removes the only thing the
+  // host reads, so its pill tracks live updates for a while and then goes
+  // blank on the next history sync. The checklist belongs in the Tasks panel
+  // beside the chat and in the host's own pill, both of which depend on the
+  // row staying Paseo's.
 
   const removeUserTransformer = client.addTimelineTransformer({
     id: "omp-enhanced-user-message",
@@ -268,8 +272,6 @@ export default function contribute(client: PluginClientContext) {
     removeToolRenderer();
     removeReasoningTransformer();
     removeReasoningRenderer();
-    removeTodoTransformer();
-    removeTodoRenderer();
     removeUserTransformer();
     removeUserRenderer();
     removeAssistantTransformer();

@@ -1,8 +1,9 @@
 # Beautiful Chat
 
-A Paseo plugin that redraws the Oh My Pi (OMP) chat stream: tool calls, reasoning, prompts, approvals,
-and checklists. It replaces the host rendering of OMP timeline items with typed, syntax-aware cards
-that follow the active Paseo theme.
+A Paseo plugin that redraws the Oh My Pi (OMP) chat stream: tool calls, reasoning, prompts, and
+approvals. It replaces the host rendering of OMP timeline items with typed, syntax-aware cards that
+follow the active Paseo theme, and pins the agent's checklist on a panel of its own — beside the
+conversation or as a workspace tab — where the stream cannot scroll it away.
 
 ![A prompt, a tool call, a finished background job, and the reply that closes the turn](images/hero.png)
 
@@ -111,11 +112,24 @@ A collapsible trace with a connected step rail, per-step duration, and a token t
 
 ![Reasoning trace](docs/images/reasoning.png)
 
-### Checklist
+### Checklist panel
 
-Phase name, per-task status, durations, and a blocked task with its reason.
+The agent's checklist, live, on a surface of its own instead of a row that scrolls away. Open it
+from **⌘K / Ctrl+K -> Open agent tasks**, or from **Tasks** in the workspace tab menu or the
+Explorer's panel menu; pinned in the Explorer it sits beside the conversation and follows whichever
+agent is on screen. Phase progress, per-task status, durations, and a blocked task with its reason
+are all drawn here.
 
 ![Checklist](docs/images/tasks.png)
+
+The panel reads the checklist from the agent's own timeline — one page for what it is now, then the
+live stream for each revision — so it is correct when the chat is scrolled, when the row is not
+rendered, and before the checklist row has ever been drawn.
+
+The checklist row itself is Paseo's. Paseo builds its own `n/m tasks` pill above the composer and
+the list behind it from that row, so the plugin leaves it alone; see
+[limitation 15](#plugin-sdk-limitations-found-while-building-this). That pill is the count to watch
+while working, and the panel is the full list.
 
 ### Approval card
 
@@ -197,8 +211,8 @@ The link cannot open Paseo's own file editor: see the first limitation below.
 
 ## Plugin SDK limitations found while building this
 
-Measured against `@getpaseo/plugin` 0.8.0 and the Paseo 0.8.0 desktop build. Each entry names the
-evidence and the workaround this plugin uses.
+Measured against `@getpaseo/plugin` 0.8.0 and the Paseo 0.8.0–0.9.2 desktop and web builds. Each
+entry names the evidence and the workaround this plugin uses.
 
 1. **No file navigation.** Timeline renderer props are exactly `{agentId, theme, host, layout,
 timestamp, item}`, and plugin navigation offers only `openSettings`, `openSurface`,
@@ -252,6 +266,15 @@ timestamp, item}`, and plugin navigation offers only `openSettings`, `openSurfac
     message id, then waits for a row carrying that id. A transformed row always carries
     `<pluginId>/<itemId>` instead, so Ctrl+F on a styled prompt or reply never reveals the match.
     Workaround: the plugin's own find bar, described in [Finding text](#finding-text).
+15. **Paseo's own Tasks UI reads the checklist row.** The `n/m tasks` pill above the composer and
+    the list behind it are built from `todo` rows in the render model: the app scans the stream
+    rows for `kind === "todo_list"` after transformers have run, and its live readout comes from
+    `todo` items on the raw event stream. A transformer that replaces the row therefore removes the
+    only thing the host reads — the pill tracks live updates for a while, then goes blank on the
+    next history sync, and the popup list empties with it. There is no API to contribute to that
+    pill, so this plugin leaves `todo` items to Paseo and draws the checklist on its own panel
+    instead (see [Checklist panel](#checklist-panel)). A plugin that needs a checklist footer of
+    its own must accept a second pill next to Paseo's, or lose the host's.
 
 ---
 
@@ -269,6 +292,10 @@ beautiful-chat/
     live-renderers.tsx       # Timeline item to component mapping
     settings-page.tsx        # Settings screen
     preferences.ts           # Client-side presentation preferences
+    task-panel.tsx           # Tasks panel, registered for the Explorer and workspace tabs
+    task-views.tsx           # The checklist body the panel draws
+    agent-tasks.ts           # Live checklist per agent, read from the timeline
+    active-agent.ts          # Which agent's stream is on screen
     components/              # Cards, syntax block, glyphs, motion, theme tokens
       mark-bitmaps.ts        # GENERATED PNG rasters of every brand mark
       devicon-data.ts        # Vendor SVG sources, read only by the generator

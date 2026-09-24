@@ -11,16 +11,20 @@ import { radius } from "./theme-tokens";
 import { selectableSurface, unselectable } from "./selection";
 import { selectionSurface } from "./selection-actions";
 import type { ExtendedThemeTokens } from "./theme-tokens";
-import type { TaskListData, TaskItemData, TaskStatus } from "../../shared/contracts";
+import type { TaskListData, TaskItemData } from "../../shared/contracts";
 
 interface TaskListProps {
   data: TaskListData;
   tokens: ExtendedThemeTokens;
-  onToggleTask?: (taskId: string, newStatus: TaskStatus) => void;
 }
 
-export function TaskList({ data, tokens, onToggleTask }: TaskListProps) {
-  const [tasks, setTasks] = useState<TaskItemData[]>(data.tasks);
+/**
+ * A checklist as a report, not a control: the statuses belong to the agent that
+ * wrote them, and a press here cannot reach it. The one interaction left is
+ * opening a blocked row's reason.
+ */
+export function TaskList({ data, tokens }: TaskListProps) {
+  const tasks: TaskItemData[] = data.tasks;
   const [expandedBlockedId, setExpandedBlockedId] = useState<string | null>(null);
 
   const completedCount = tasks.filter((t) => t.status === "completed").length;
@@ -277,16 +281,6 @@ export function TaskList({ data, tokens, onToggleTask }: TaskListProps) {
     [tokens],
   );
 
-  const toggleStatus = (task: TaskItemData) => {
-    let nextStatus: TaskStatus = "pending";
-    if (task.status === "pending") nextStatus = "in_progress";
-    else if (task.status === "in_progress") nextStatus = "completed";
-    else if (task.status === "completed") nextStatus = "pending";
-
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t)));
-    onToggleTask?.(task.id, nextStatus);
-  };
-
   return (
     <View
       {...surfaceProps(frosted, glowing(tokens.isDark), selectionSurface)}
@@ -340,45 +334,38 @@ export function TaskList({ data, tokens, onToggleTask }: TaskListProps) {
             const isBlocked = task.status === "blocked";
             const isBlockedOpen = expandedBlockedId === task.id;
 
+            const marker = isDone ? (
+              <Glyph name="CheckCircle" size={13} color={tokens.success} />
+            ) : isBlocked ? (
+              <Glyph name="AlertCircle" size={13} color={tokens.warning} />
+            ) : (
+              <Glow active={isActive} color={tokens.accent} size={22}>
+                <Glyph
+                  name="Circle"
+                  size={13}
+                  color={isActive ? tokens.accent : tokens.foregroundSubtle}
+                />
+              </Glow>
+            );
+
+            const titleStyle = [
+              styles.taskTitle,
+              isDone && styles.taskTitleCompleted,
+              isActive && styles.taskTitleActive,
+            ];
+
             return (
               <View
                 key={task.id}
                 style={[styles.taskRow, isBlocked && styles.taskRowBlocked]}
                 onLayout={(event) => recordTick(taskIndex, event.nativeEvent.layout.y)}
               >
-                <Pressable
-                  accessibilityLabel={`Set ${task.title} status`}
-                  onPress={() => toggleStatus(task)}
-                  style={styles.taskDot}
-                >
-                  {isDone ? (
-                    <Glyph name="CheckCircle" size={13} color={tokens.success} />
-                  ) : isBlocked ? (
-                    <Glyph name="AlertCircle" size={13} color={tokens.warning} />
-                  ) : (
-                    <Glow active={isActive} color={tokens.accent} size={22}>
-                      <Glyph
-                        name="Circle"
-                        size={13}
-                        color={isActive ? tokens.accent : tokens.foregroundSubtle}
-                      />
-                    </Glow>
-                  )}
-                </Pressable>
+                <View style={styles.taskDot}>{marker}</View>
 
                 <View style={styles.taskContent}>
-                  <Pressable onPress={() => toggleStatus(task)}>
-                    <Text
-                      selectable
-                      style={[
-                        styles.taskTitle,
-                        isDone && styles.taskTitleCompleted,
-                        isActive && styles.taskTitleActive,
-                      ]}
-                    >
-                      {task.title}
-                    </Text>
-                  </Pressable>
+                  <Text selectable style={titleStyle}>
+                    {task.title}
+                  </Text>
 
                   <View style={styles.taskFooterRow}>
                     {isActive && (
